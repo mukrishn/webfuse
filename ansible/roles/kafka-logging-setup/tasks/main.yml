@@ -16,7 +16,11 @@
     - 03-kafka-sub-streams.yaml
     - 04-kafka-cluster.yaml
 
-- name: Wait for all pods in the amq namespace to become ready
+- name: Wait 30 seconds
+  pause:
+    seconds: 30
+
+- name: Wait for all pods in the amq namespace to become ready (timeout is 600s, so be patient)
   shell: |
     oc wait --namespace=amq --for=condition=Ready pods --all --timeout=600s
 
