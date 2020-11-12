@@ -1,11 +1,17 @@
 ---
+- name: Create the amq namespace for kafka
+  k8s:
+    name: "{{ amq_namespace }}"
+    api_version: v1
+    kind: Namespace
+    state: present
+
 - name: Deploy Kafka cluster
   k8s:
     state: present
     namespace: "{{ amq_namespace }}"
     definition: "{{ lookup('file', item ) }}"
   with_items:
-    - 01-kafka-namespace.yaml
     - 02-kafka-og.yaml
     - 03-kafka-sub-streams.yaml
     - 04-kafka-cluster.yaml
