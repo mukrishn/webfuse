@@ -29,19 +29,23 @@
   with_items:
     - 11-cr-cluster-logging.yaml
 
-# TODO 
-# The next command is ugly as hell, I wonder if there's a better module for this
+- name: Retrieve the secret
+  openshift_raw:
+    api: v1
+    kind: Secret
+    name: my-cluster-cluster-ca-cert
+    namespace: amq
+  register: mysecret
 
-- name: Create the kafka - fluentd secret
-  command: oc -n amq get secret my-cluster-cluster-ca-cert -o jsonpath='{.data.ca\.crt}' | base64 -d > ca.crt ; oc create secret generic kafka-fluent --from-file=ca-bundle.crt=ca.crt  -n openshift-logging
+- set_fact:
+    my_ca: "{{ mysecret.result.data['ca.crt'] | b64decode}}"
 
-#- name: Retrieve the secret
-#  openshift_raw:
-#    api: v1
-#    kind: Secret
-#    name: my-cluster-cluster-ca-cert
-#    namespace: amq
-#  register: mysecret
+- name: Save the CA certificate
+  copy: content="{{ my_ca }}" dest=./ca.crt
+
+- name: Create the fluentd-kafka secret
+  shell: |
+    oc create secret generic kafka-fluent --from-file=ca-bundle.crt=./ca.crt -n openshift-logging
 
 - name: Deploy Cluster log forwarder
   k8s:
