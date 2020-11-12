@@ -16,8 +16,9 @@
     - 03-kafka-sub-streams.yaml
     - 04-kafka-cluster.yaml
 
-# TODO
-# Wait and Check if all resources are ready
+- name: Wait for all pods in the amq namespace to become ready
+  shell: |
+    oc wait --namespace=amq --for=condition=Ready pods --all --timeout=600s
 
 - name: Create Kafka topics 
   k8s:
@@ -57,7 +58,7 @@
   k8s:
     state: present
     namespace: "{{ amq_namespace }}"
-    definition: "{{ lookup('file', 'clusterforwarder.yaml' ) }}"
+    definition: "{{ lookup('file', item ) }}"
   with_items:
     - 13-cr-logforwarding-to-kafka-topics.yaml
 
