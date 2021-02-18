@@ -1,0 +1,110 @@
+## Openshift Virtualization VM - Research purpose
+- name: Create separate pool of worker
+  include_role:
+    name: bigip-ingress-setup
+    tasks_from: 10_machine_setup.yml
+  vars:
+    bigip_worker_mcp: "{{ trident_worker_mcp }}"
+    bigip_hostpath_dir: "{{ vsim_disk_image_dir }}"
+    bigip_vms:
+      netapp: 
+         worker_node: "{{ trident_worker }}"
+
+- name: Create SR-IOV resources
+  include_role:
+    name: bigip-ingress-setup
+    tasks_from: 30_sriov_network.yml
+  vars:
+    num_vf: 1
+    bigip_namespace: "{{ trident_namespace }}"
+    bigip_worker_mcp: "{{ trident_worker_mcp }}"
+    bigip_sriov_int: "{{ vsim_sriov_int }}"
+    bigip_sriov_network_ipam_address: "{{ extcidrnet }}"
+    bigip_sriov_network_ipam_gateway: "{{ extcidrnetgw | default(extcidrnet | next_nth_usable(1)) }}"
+    bigip_vms:
+      netapp: 
+         worker_node: "{{ trident_worker }}"
+
+- name: Create Data volume
+  k8s:
+    state: present
+    definition: "{{ lookup('template', 'datavolume.yaml.j2') }}"
+
+- pause:
+    seconds: 30
+
+- name: Get Data volumes
+  k8s_facts:
+    kind: DataVolume
+    api_version: cdi.kubevirt.io/v1alpha1
+    namespace: '{{ trident_namespace }}'
+  register: dv_status
+  
+- block:
+    - name: Create a Working Directory
+      tempfile:
+        state: directory
+      register: work_dir
+
+    - name: Download image
+      get_url:
+        url: "http://perf1.perf.lab.eng.bos.redhat.com/pub/dwilson/OntapGoldImage.tar.gz"
+        dest: "{{ work_dir.path }}"
+      register: netapp_vm_image
+
+    - name: Extract tar file
+      unarchive:
+        src: "{{ netapp_vm_image.dest }}"
+        dest: "{{ work_dir.path }}"
+        remote_src: yes
+
+    - name: Download virtctl 
+      get_url: 
+        url: "https://github.com/kubevirt/kubevirt/releases/download/v0.38.1/virtctl-v0.38.1-linux-amd64"
+        dest: "{{ work_dir.path }}/virtctl"
+
+    - name: Change file mode
+      shell: |
+        chmod +x virtctl
+      args:
+        chdir: "{{ work_dir.path }}"
+
+    - name: Create an Upload Data volume 
+      shell: |
+        ./virtctl image-upload dv netapp-volume-{{ item }} --insecure --no-create --image-path=netapp-1-disk{{ item }}.qcow2
+      args:
+        chdir: "{{ work_dir.path }}"    
+      with_sequence: start=1 count={{ num_disk | default(4) }}
+      poll: 0
+      async: 20000
+
+    - name: Wait for few seconds before checking for status
+      wait_for:
+        timeout: 20
+  when: ("'UploadReady' in dv_status | json_query('resources[*].status.phase') | list") or 
+        ("'UploadScheduled' in dv_status | json_query('resources[*].status.phase') | list")
+
+- name: wait until datavolumes are imported
+  shell: |
+    oc -n {{ trident_namespace }} get dv/netapp-volume-{{ item }} -o json
+  register: dv_status
+  until: "(dv_status.stdout|from_json).status.phase == 'Succeeded'"
+  retries: 60
+  delay: 30
+  with_sequence: start=1 count={{ num_disk | default(4) }}
+
+- name: Create Ontap Simulator virtual machine
+  k8s:
+    state: present
+    definition: "{{ lookup('template', 'netapp-ontap-vsim-cnv.yaml.j2') }}"
+  vars:
+    num_vf: 1
+    vm_name: "netapp"
+
+- name: Waiting for VM 
+  wait_for:
+    host: "{{ extcidrnet | next_nth_usable(lif_ip_nth) }}"
+    port: 22
+    search_regex: OpenSSH
+    timeout: 300
+

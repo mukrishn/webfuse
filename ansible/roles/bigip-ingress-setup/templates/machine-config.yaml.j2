@@ -12,7 +12,7 @@ spec:
 apiVersion: machineconfiguration.openshift.io/v1
 kind: MachineConfig
 metadata:
-  name: 50-set-selinux-for-hostpath-provisioner
+  name: 50-{{ bigip_worker_mcp }}-set-selinux-for-hostpath-provisioner
   labels:
     machineconfiguration.openshift.io/role: {{ bigip_worker_mcp }}
 spec:

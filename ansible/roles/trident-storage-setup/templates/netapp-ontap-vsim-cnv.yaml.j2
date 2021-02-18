@@ -1,0 +1,71 @@
+apiVersion: v1
+kind: List
+metadata: {}
+items:
+  - apiVersion: kubevirt.io/v1alpha3
+    kind: VirtualMachine
+    metadata:
+      name: {{ vm_name }}
+      namespace: {{ trident_namespace }}
+      annotations:
+{% for i in range(num_vf|default(1)) %}            
+        k8s.v1.cni.cncf.io/networks: {{ vm_name }}{{ vsim_sriov_int }}vf{{ i }}
+{% endfor %}
+      labels:
+        netapp: trident
+    spec:
+      runStrategy: Always
+      template:
+        metadata:
+          labels:
+            netapp: trident
+        spec:
+          nodeSelector:
+            kubernetes.io/hostname: {{ trident_worker }}
+          domain:
+            resources:
+              requests:
+                memory: "8192Mi"
+                cpu: "4"
+            devices:
+              disks:
+              - bootOrder: 1
+                name: hda
+                disk:
+                  bus: sata
+              - bootOrder: 2
+                name: hdb
+                disk:
+                  bus: sata
+              - bootOrder: 3
+                name: hdc
+                disk:
+                  bus: sata
+              - bootOrder: 4
+                name: hdd
+                disk:
+                  bus: sata
+              interfaces:
+{% for i in range(num_vf|default(1)) %}            
+              - name: baremetal{{ i }}
+                sriov: {}                              
+{% endfor %}
+          volumes:
+          - name: hda
+            persistentVolumeClaim:
+              claimName: netapp-volume-1
+          - name: hdb
+            persistentVolumeClaim:
+              claimName: netapp-volume-2
+          - name: hdc
+            persistentVolumeClaim:
+              claimName: netapp-volume-3
+          - name: hdd
+            persistentVolumeClaim:
+              claimName: netapp-volume-4
+          networks:
+{% for i in range(num_vf|default(1)) %}
+          - name: baremetal{{ i }}
+            multus:
+              networkName: {{ vm_name }}{{ vsim_sriov_int }}vf{{ i }}
+{% endfor %}

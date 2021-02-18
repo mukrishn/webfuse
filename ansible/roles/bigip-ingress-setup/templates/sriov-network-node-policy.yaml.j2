@@ -4,7 +4,7 @@ metadata: {}
 items:
 {% set i = namespace(value=0) %}
 {% for vm in bigip_vms %}
-{% for n in range(2) %}
+{% for n in range(num_vf|default(2)) %}
   - apiVersion: sriovnetwork.openshift.io/v1
     kind: SriovNetworkNodePolicy
     metadata:
