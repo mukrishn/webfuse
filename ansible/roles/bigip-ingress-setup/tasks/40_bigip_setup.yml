@@ -35,3 +35,7 @@
   template:
     src: stablcurco1_dns46.tcl.j2
     dest: ./roles/bigip-ingress-setup/files/stablcurco1_dns46.tcl
+
+- name: Set MCP {{ bigip_worker_mcp }} MaxUnavailable to default 1
+  shell: |
+    oc patch mcp {{ bigip_worker_mcp }} --type='merge' --patch="{\"spec\":{\"maxUnavailable\": 1 }}"
